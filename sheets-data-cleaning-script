@@ -1,0 +1,176 @@
+function runQC() {
+  const data = sheet.getDataRange().getValues();
+  const dataRows = data.slice(1).filter(row => row[0].toString().trim() !== "");
+
+  const order = dataRows.map(row => ({
+    orderId: row[0].trim(),
+    status: row[1].trim().toUpperCase(),
+    region: row[2].trim().toUpperCase(),
+    customer: row[3].trim(),
+    amount: row[4],
+    email: row[5].trim().toString().toLowerCase(),
+    orderDate: row[6],
+  }))
+
+  const seenIDs = new Set();
+
+  const idDuplicatesCheck = order.filter(o => {
+    if(seenIDs.has(o.orderId)) {
+      return true
+    }
+    seenIDs.add(o.orderId);
+    return false;
+  });
+
+  if (idDuplicatesCheck.length > 0) {
+    const duplicateIDs = idDuplicatesCheck.map(o => o.orderId).join(", ");
+    const cellIdWord = idDuplicatesCheck.length === 1 ? "cell" : "cells"; 
+
+    Logger.log(`⚠ duplicate id(s): ${idDuplicatesCheck.length} ${cellIdWord}. IDs: ${duplicateIDs}`);
+  } else {
+    Logger.log("No duplicate IDs ✓")
+  }
+
+  const qcStatusCheck = order.filter(o => o.status === "");
+
+  if (qcStatusCheck.length > 0) {
+    const statusProblematicIDs = qcStatusCheck.map(o => o.orderId).join(", ");
+
+    Logger.log(`⚠ missing status: ${qcStatusCheck.length} row(s). IDs: ${statusProblematicIDs}`);
+  } else {
+    Logger.log("Qc status check passed ✓")
+  }
+
+  const qcNegativeAmountCheck = order.filter(o => o.amount < 0);
+
+  if (qcNegativeAmountCheck.length > 0) {
+    const amountProblematicIDs = qcNegativeAmountCheck.map(o => o.orderId).join(", ");
+
+    Logger.log(`⚠ negative amount: ${qcNegativeAmountCheck.length} row(s). IDs: ${amountProblematicIDs}`);
+  } else {
+    Logger.log("Qc negative amount check passed ✓")
+  }
+
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+  const qcEmailValidationCheck = order.filter(o => !emailRegex.test(o.email));
+
+  if (qcEmailValidationCheck.length > 0) {
+    const emailProblematicIDs = qcEmailValidationCheck.map(o => o.orderId).join(", ");
+    const rowWord = qcEmailValidationCheck.length === 1 ? "row" : "rows";
+
+    Logger.log(`⚠ invalid email(s): ${qcEmailValidationCheck.length} ${rowWord} . IDs: ${emailProblematicIDs}`);
+  } else {
+    Logger.log("Qc email validation passed ✓")
+  }
+
+  const qcBlankCellCheck = order.filter(o => Object.values(o).some(value => value === "" || value === "(blank)"))
+
+  if (qcBlankCellCheck.length > 0) {
+    const blankCellsIDs = qcBlankCellCheck.map(o => o.orderId).join(", ");
+    const cellWord = qcBlankCellCheck.length === 1 ? "cell" : "cells";
+
+    Logger.log(`⚠ blank cell(s): ${qcBlankCellCheck.length} ${cellWord} . IDs: ${blankCellsIDs}`);
+  } else {
+    Logger.log("No blank cell(s) ✓")
+  }
+
+  // amount outlier checker
+  const amounts = dataRows.map(row => Number(row[4]));
+
+  const q1 = getQuartile(amounts, 0.25);
+  const q3 = getQuartile(amounts, 0.75);
+  const interQuartileRange = q3 - q1;
+  const lowerBoundary = q1 - (interQuartileRange * 1.5);
+  const upperBoundary = q3 + (interQuartileRange * 1.5);
+
+  // id duplicate checker
+  const idCounts = {};
+
+  dataRows.forEach(row => {
+    const id = row[0].toString().trim().toUpperCase();
+
+    idCounts[id] = (idCounts[id] || 0) + 1;
+  });
+
+  const bgColors = dataRows.map(() => Array(7).fill("#FFFFFF")); 
+  const textColors = dataRows.map(() => Array(7).fill("#000000"));
+  const fontWeights = dataRows.map(() => Array(7).fill("normal"));
+
+  // create qc results with highlights for problematic cells
+  const qcResults = dataRows.map((row, index) => {
+    const orderId = row[0].toString().trim().toUpperCase();
+    const amount = Number(row[4]);
+    const email = row[5].toString().trim();
+
+    let rowStatus = "Clean";
+
+    // Blank Cells in columns A-G
+    for(let col = 0; col < 7; col++) {
+      const cellValue = row[col].toString().trim();
+      if (cellValue === "" || cellValue.toLowerCase() === "(blank)") {
+        bgColors[index][col] = "#c40000";
+        textColors[index][col] = "#FFFFFF";
+        fontWeights[index][col] = "bold";
+        rowStatus = "Blank Cell!"
+      }
+    }
+
+    // Check for duplicate IDs
+    if (idCounts[orderId] > 1) {
+      bgColors[index][0] = "#d95f23"
+      rowStatus = "Duplicate ID!"
+    }
+
+    // Negative amounts and Outlier values
+    if (amount < 0) {
+      bgColors[index][4] = "#d95f23";
+      rowStatus = "Negative Amount!";
+    }
+
+    if (amount < lowerBoundary || amount > upperBoundary) {
+      bgColors[index][4] = "#c40000";
+      textColors[index][4] = "#FFFFFF";
+      fontWeights[index][4] = "bold";
+      rowStatus = "Possible Outlier";
+    }
+
+    // Email regex match
+    if (!emailRegex.test(email)) {
+      bgColors[index][5] = "#c40000";   
+      textColors[index][5] = "#FFFFFF";
+      fontWeights[index][5] = "bold";
+      if (rowStatus === "Clean") rowStatus = "Invalid Email!";
+    }
+
+    return [rowStatus];
+  });
+
+  const targetDataRange = sheet.getRange(2, 1, dataRows.length, 7);
+  targetDataRange.setBackgrounds(bgColors);
+  targetDataRange.setFontColors(textColors);
+  targetDataRange.setFontWeights(fontWeights);
+
+  sheet.getRange(1, 8).setValue("QC status");
+  sheet.getRange(2, 8, qcResults.length, 1).setValues(qcResults);
+
+  Logger.log(`QC complete. Wrote ${qcResults.length} results.`)
+};
+
+// helper function for calculating outlier amounts using quartile
+function getQuartile(dataAmount, percentile) {
+  // sort amount values first
+  const sortedAmount = dataAmount.slice().sort((a, b) => a - b);
+
+  // find the index of the percentile
+  const pos = (sortedAmount.length - 1) * percentile;
+  const base = Math.floor(pos);
+  const rest = pos - base;
+
+  // interpolate if index is decimal, otherwise return number
+  if(sortedAmount[base] + 1 !== undefined) {
+    return sortedAmount[base] + rest * (sortedAmount[base + 1] - sortedAmount[base])
+  } else {
+    return sortedAmount[base]
+  }
+};
