@@ -56,12 +56,14 @@ function onFormSubmit(e) {
 
 // DOCUMENT GENERATION
 function generateInvoice(order) {
+// getting all of the necessary files on the drive and creating a template copy
   const template = DriveApp.getFilesByName(CONFIG.templateName).next();
   const folder   = DriveApp.getFoldersByName(CONFIG.outputFolderName).next();
   const copy     = template.makeCopy(`${order.customer} — ${order.orderId}`, folder);
   const doc = DocumentApp.openById(copy.getId()); // Define the document
   const body = doc.getBody();                     // Define the body
 
+  // replacing placeholders for real values on the copied template
   body.replaceText("{{order_id}}",    order.orderId);
   body.replaceText("{{company_name}}", order.companyName)
   body.replaceText("{{client_name}}", order.customer);
