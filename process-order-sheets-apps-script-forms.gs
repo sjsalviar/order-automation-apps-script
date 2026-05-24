@@ -1,16 +1,14 @@
-// ─── CONFIGURATION ──────────────────────────────────────────
-// Change these to match your actual file names and IDs
+// CONFIGURATION
 const CONFIG = {
   sheetName:       "Form_Responses",
   templateName:    "Invoice Template",
   outputFolderName:"Generated Invoices",
   orderIdColumn:   7,
   urlColumn:       9,  // column H — where the doc URL gets written
-  senderName:      "Gooner Business :D",
+  senderName:      "Stephen Joshua Soria ALvia Services",
 };
 
-// ─── MAIN TRIGGER FUNCTION ───────────────────────────────────
-// Attach this to "On form submit" trigger in the editor
+// MAIN TRIGGER FUNCTION
 function onFormSubmit(e) {
   try {
     // Get the sheet and find the last submitted row
@@ -20,7 +18,7 @@ function onFormSubmit(e) {
     const rowData = sheet.getRange(lastRow, 1, 1, CONFIG.urlColumn)
                          .getValues()[0]; // [0] gets the single row
 
-    // Build the order object from the row (adjust indices to match your form)
+    // Build the order object from the row
     const order = {
       timestamp: rowData[0],
       customer:  rowData[1].toString().trim(),
@@ -50,13 +48,13 @@ function onFormSubmit(e) {
   } catch (err) {
     // Log errors so you can see them in the execution log
     Logger.log("ERROR: " + err.message);
-    // Optionally email yourself the error:
+    // Sending the error to my email
     GmailApp.sendEmail(Session.getActiveUser().getEmail(),
       "Script error: onFormSubmit", err.message);
   }
 }
 
-// ─── DOCUMENT GENERATION ─────────────────────────────────────
+// DOCUMENT GENERATION
 function generateInvoice(order) {
   const template = DriveApp.getFilesByName(CONFIG.templateName).next();
   const folder   = DriveApp.getFoldersByName(CONFIG.outputFolderName).next();
@@ -75,7 +73,7 @@ function generateInvoice(order) {
   return copy.getUrl();
 }
 
-// ─── EMAIL CONFIRMATION ──────────────────────────────────────
+// EMAIL CONFIRMATION
 function sendConfirmation(order, docUrl) {
   const subject = `Invoice ready — ${order.orderId}`;
   const html    = `<p>Hi ${order.customer},</p>
