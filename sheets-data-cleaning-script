@@ -1,7 +1,10 @@
+// script for cleaning sheets data using apps script
 function runQC() {
+  // get spreadsheet values (take note its using the config spreadsheet from process-order script)
   const data = sheet.getDataRange().getValues();
   const dataRows = data.slice(1).filter(row => row[0].toString().trim() !== "");
 
+  // converting sheets data rows to objects
   const order = dataRows.map(row => ({
     orderId: row[0].trim(),
     status: row[1].trim().toUpperCase(),
@@ -12,6 +15,7 @@ function runQC() {
     orderDate: row[6],
   }))
 
+  // checking for duplicate IDs
   const seenIDs = new Set();
 
   const idDuplicatesCheck = order.filter(o => {
@@ -31,6 +35,7 @@ function runQC() {
     Logger.log("No duplicate IDs ✓")
   }
 
+  // checking for blank cell on status column
   const qcStatusCheck = order.filter(o => o.status === "");
 
   if (qcStatusCheck.length > 0) {
@@ -41,6 +46,7 @@ function runQC() {
     Logger.log("Qc status check passed ✓")
   }
 
+  // checking for negative numbers on amount column
   const qcNegativeAmountCheck = order.filter(o => o.amount < 0);
 
   if (qcNegativeAmountCheck.length > 0) {
@@ -51,6 +57,7 @@ function runQC() {
     Logger.log("Qc negative amount check passed ✓")
   }
 
+  // checking for invalid emails using email regular expression on email column
   const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
   const qcEmailValidationCheck = order.filter(o => !emailRegex.test(o.email));
@@ -64,6 +71,7 @@ function runQC() {
     Logger.log("Qc email validation passed ✓")
   }
 
+  // checking for blank cells on all columns
   const qcBlankCellCheck = order.filter(o => Object.values(o).some(value => value === "" || value === "(blank)"))
 
   if (qcBlankCellCheck.length > 0) {
@@ -75,7 +83,7 @@ function runQC() {
     Logger.log("No blank cell(s) ✓")
   }
 
-  // amount outlier checker
+  // check for possible outliers on amount column
   const amounts = dataRows.map(row => Number(row[4]));
 
   const q1 = getQuartile(amounts, 0.25);
@@ -84,7 +92,7 @@ function runQC() {
   const lowerBoundary = q1 - (interQuartileRange * 1.5);
   const upperBoundary = q3 + (interQuartileRange * 1.5);
 
-  // id duplicate checker
+  // highlight duplicate IDs
   const idCounts = {};
 
   dataRows.forEach(row => {
@@ -93,11 +101,12 @@ function runQC() {
     idCounts[id] = (idCounts[id] || 0) + 1;
   });
 
+  // creating the blueprint for highlighting cells (7 since theres only 7 columns)
   const bgColors = dataRows.map(() => Array(7).fill("#FFFFFF")); 
   const textColors = dataRows.map(() => Array(7).fill("#000000"));
   const fontWeights = dataRows.map(() => Array(7).fill("normal"));
 
-  // create qc results with highlights for problematic cells
+  // creating the results for the qc on column H then highlight cells which didnt pass the qc
   const qcResults = dataRows.map((row, index) => {
     const orderId = row[0].toString().trim().toUpperCase();
     const amount = Number(row[4]);
@@ -105,7 +114,7 @@ function runQC() {
 
     let rowStatus = "Clean";
 
-    // Blank Cells in columns A-G
+    // checking blank Cells in columns A-G then highlghting the specific blank cell
     for(let col = 0; col < 7; col++) {
       const cellValue = row[col].toString().trim();
       if (cellValue === "" || cellValue.toLowerCase() === "(blank)") {
@@ -116,18 +125,19 @@ function runQC() {
       }
     }
 
-    // Check for duplicate IDs
+    // highlighting duplicate IDs on ID column
     if (idCounts[orderId] > 1) {
       bgColors[index][0] = "#d95f23"
       rowStatus = "Duplicate ID!"
     }
 
-    // Negative amounts and Outlier values
+    // highlighting negative amounts on amount column
     if (amount < 0) {
       bgColors[index][4] = "#d95f23";
       rowStatus = "Negative Amount!";
     }
 
+    // highlighting possible outliers on amount column
     if (amount < lowerBoundary || amount > upperBoundary) {
       bgColors[index][4] = "#c40000";
       textColors[index][4] = "#FFFFFF";
@@ -135,7 +145,7 @@ function runQC() {
       rowStatus = "Possible Outlier";
     }
 
-    // Email regex match
+    // highlighting emails that does not match the email regex on email column
     if (!emailRegex.test(email)) {
       bgColors[index][5] = "#c40000";   
       textColors[index][5] = "#FFFFFF";
@@ -146,11 +156,13 @@ function runQC() {
     return [rowStatus];
   });
 
+  // inserting the highlight results onto the blueprint created
   const targetDataRange = sheet.getRange(2, 1, dataRows.length, 7);
   targetDataRange.setBackgrounds(bgColors);
   targetDataRange.setFontColors(textColors);
   targetDataRange.setFontWeights(fontWeights);
 
+  // inserting the results of the qc onto column 8 and labelling the column "QC status"
   sheet.getRange(1, 8).setValue("QC status");
   sheet.getRange(2, 8, qcResults.length, 1).setValues(qcResults);
 
