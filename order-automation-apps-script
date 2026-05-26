@@ -18,14 +18,14 @@ function onFormSubmit(e) {
     const rowData = sheet.getRange(lastRow, 1, 1, CONFIG.urlColumn)
                          .getValues()[0]; // [0] gets the single row
 
-    // Build the order object from the row
+    // Build the order object from the row (adjust indices to match your form)
     const order = {
       timestamp: rowData[0],
-      customer:  rowData[1].toString().trim(),
-      email:     rowData[2].toString().trim().toLowerCase(),
-      service:   rowData[3].toString(),
-      hourlyRate:    Number(rowData[4]),
-      companyName: rowData[5] ? rowData[5].toString().trim() : "",
+      customer: rowData[1] ? rowData[1].toString().trim() : "Blank",
+      email: rowData[2] ? rowData[2].toString().trim().toLowerCase() : "Blank",
+      service: rowData[3] ? rowData[3].toString() : "Blank",
+      hourlyRate: rowData[4] ? Number(rowData[4]) : "Blank",
+      companyName: rowData[5] ? rowData[5].toString().trim() : "", // checks if there is value on column F (Company Name), takes the value if there is, returns blank if there is no value
       orderId:   `ORD-${String(lastRow - 1).padStart(3, "0")}` // auto-generate ID
     };
 
